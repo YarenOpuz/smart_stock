@@ -1,7 +1,7 @@
 from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime
-
+from fastapi import UploadFile
 
 class UserCreate(BaseModel):
     email: str
@@ -9,6 +9,7 @@ class UserCreate(BaseModel):
     full_name: Optional[str] = None
     office_address: Optional[str] = None
     phone_number: Optional[str] = None
+    image: Optional[UploadFile] = None  # Dosya upload için UploadFile tipinde
   
 
 
@@ -18,6 +19,7 @@ class UserRead(BaseModel):
     full_name: Optional[str] = None
     office_address: Optional[str] = None
     phone_number: Optional[str] = None
+    image_path: Optional[str] = None
     is_active: bool
     created_at: datetime
 
