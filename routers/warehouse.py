@@ -1,31 +1,33 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 
 from database import get_db
 from models.warehouse import Warehouse
 from schemas.warehouse import WarehouseCreate, WarehouseRead
 from routers.auth import get_current_user
+from models.user import User
 
 router = APIRouter(prefix="/warehouses", tags=["warehouses"])
 
 
 @router.post("/", response_model=WarehouseRead, status_code=status.HTTP_201_CREATED)
-async def create_warehouse(
-    warehouse_data: WarehouseCreate, 
+def create_warehouse(
+    warehouse: WarehouseCreate,
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
-    # Check if warehouse with this name already exists
-    existing_warehouse = db.query(Warehouse).filter(Warehouse.name == warehouse_data.name).first()
-    if existing_warehouse:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Warehouse with name '{warehouse_data.name}' already exists"
-        )
-    
-    # Create new warehouse
-    new_warehouse = Warehouse(**warehouse_data.dict())
+    # Create new warehouse with all fields from schema
+    new_warehouse = Warehouse(
+        name=warehouse.name,
+        location=warehouse.location,
+        capacity=warehouse.capacity,
+        rental_price=warehouse.rental_price,
+        warehouse_type=warehouse.warehouse_type,
+        used_by_company=warehouse.used_by_company,
+        is_available=warehouse.is_available,
+        owner_id=current_user.id  # Set the owner to current user
+    )
     
     # Add to database
     db.add(new_warehouse)
@@ -36,59 +38,45 @@ async def create_warehouse(
 
 
 @router.get("/", response_model=List[WarehouseRead])
-async def get_warehouses(
-    skip: int = 0, 
-    limit: int = 100, 
+def list_warehouses(
+    skip: int = 0,
+    limit: int = 100,
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     warehouses = db.query(Warehouse).offset(skip).limit(limit).all()
     return warehouses
 
 
 @router.get("/{warehouse_id}", response_model=WarehouseRead)
-async def get_warehouse(
-    warehouse_id: int, 
+def get_warehouse(
+    warehouse_id: int,
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     warehouse = db.query(Warehouse).filter(Warehouse.id == warehouse_id).first()
     if warehouse is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Warehouse with ID {warehouse_id} not found"
-        )
+        raise HTTPException(status_code=404, detail="Warehouse not found")
     return warehouse
 
 
 @router.put("/{warehouse_id}", response_model=WarehouseRead)
-async def update_warehouse(
-    warehouse_id: int, 
-    warehouse_data: WarehouseCreate, 
+def update_warehouse(
+    warehouse_id: int,
+    warehouse_update: WarehouseCreate,
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
-    # Find warehouse
+    # Get warehouse
     warehouse = db.query(Warehouse).filter(Warehouse.id == warehouse_id).first()
     if warehouse is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Warehouse with ID {warehouse_id} not found"
-        )
+        raise HTTPException(status_code=404, detail="Warehouse not found")
     
-    # Check if updating name to an existing name
-    if warehouse.name != warehouse_data.name:
-        existing_warehouse = db.query(Warehouse).filter(Warehouse.name == warehouse_data.name).first()
-        if existing_warehouse:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Warehouse with name '{warehouse_data.name}' already exists"
-            )
+    # Update all warehouse fields from the update data
+    for field, value in warehouse_update.dict().items():
+        setattr(warehouse, field, value)
     
-    # Update warehouse
-    for key, value in warehouse_data.dict().items():
-        setattr(warehouse, key, value)
-    
+    # Save changes
     db.commit()
     db.refresh(warehouse)
     
@@ -96,18 +84,15 @@ async def update_warehouse(
 
 
 @router.delete("/{warehouse_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_warehouse(
-    warehouse_id: int, 
+def delete_warehouse(
+    warehouse_id: int,
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
-    # Find warehouse
+    # Get warehouse
     warehouse = db.query(Warehouse).filter(Warehouse.id == warehouse_id).first()
     if warehouse is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Warehouse with ID {warehouse_id} not found"
-        )
+        raise HTTPException(status_code=404, detail="Warehouse not found")
     
     # Delete warehouse
     db.delete(warehouse)
